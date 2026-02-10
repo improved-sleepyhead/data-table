@@ -1,1 +1,9 @@
+@import "@fontsource/geist";
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", sans-serif;
+
+  --color-green-primary: #03301d;
+  --color-green-secondary: #86ee02;
+}
