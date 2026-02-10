@@ -1,6 +1,9 @@
+import { Header } from "./components/Header"
+
 const App = () => {
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-neutral-100">
+    <div className="relative flex min-h-screen w-full flex-col items-center bg-neutral-100">
+      <Header />
       App
     </div>
   )
