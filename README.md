@@ -32,7 +32,7 @@
 
 ## 2. Стек технологий
 
-- **Core:** React 18 (Hooks, Context API).
+- **Core:** React 19 (Hooks, Context API).
 - **Styling:** Tailwind CSS.
 - **Utils:**
   - `clsx` + `tailwind-merge` (функция `cn`) — для условного объединения CSS классов без конфликтов.
