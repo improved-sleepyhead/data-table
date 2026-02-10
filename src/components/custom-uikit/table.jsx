@@ -1,13 +1,9 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useMemo,
-  useCallback
-} from "react"
-import { cn, parseCurrency } from "../../lib/utils"
+import React, { createContext, useContext } from "react"
+import { cn } from "../../lib/utils"
 
-// Context
+// Context API
+// Used to share state (sorting, pagination, expansion) between the Root and child components
+// without prop drilling.
 const TableContext = createContext(null)
 
 const useTable = () => {
@@ -18,99 +14,112 @@ const useTable = () => {
   return context
 }
 
-// Root Component
-export const Root = ({ data, children, className }) => {
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" })
-  const [filters, setFilters] = useState({ isActive: null })
-
-  // Sorting and filters block
-  const processedData = useMemo(() => {
-    let result = [...data]
-
-    // Filters
-    if (filters.isActive !== null) {
-      result = result.filter(item => item.isActive === filters.isActive)
-    }
-
-    // Sorting
-    if (sortConfig.key) {
-      result.sort((a, b) => {
-        let aValue = a[sortConfig.key]
-        let bValue = b[sortConfig.key]
-
-        // Balance parsing
-        if (sortConfig.key === "balance") {
-          aValue = parseCurrency(aValue)
-          bValue = parseCurrency(bValue)
-        }
-
-        // Email check
-        if (typeof aValue === "string") aValue = aValue.toLowerCase()
-        if (typeof bValue === "string") bValue = bValue.toLowerCase()
-
-        if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1
-        if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1
-        return 0
-      })
-    }
-    return result
-  }, [data, sortConfig, filters])
-
-  const contextValue = useMemo(
-    () => ({
-      data: processedData,
-      sortConfig,
-      setSortConfig,
-      filters,
-      setFilters
-    }),
-    [processedData, sortConfig, filters]
-  )
-
+// --- Compound Component: Root ---
+// Acts as a controlled component. It doesn't hold internal state logic (sorting/filtering),
+// but receives it via props from hooks (Separation of Concerns).
+export const Root = ({ 
+  data, 
+  children, 
+  className,
+  sortConfig, 
+  onSort, 
+  filters, 
+  onFilterChange,
+  pagination, 
+  onPageChange,
+  expandedIds,
+  onToggleRow
+}) => {
   return (
-    <TableContext.Provider value={contextValue}>
-      <div className={cn("w-full overflow-hidden", className)}>{children}</div>
+    <TableContext.Provider value={{
+      data,
+      sortConfig,
+      onSort,
+      filters,
+      onFilterChange,
+      pagination,
+      onPageChange,
+      expandedIds,
+      onToggleRow
+    }}>
+      <div className={cn("w-full space-y-4", className)}>
+        {children}
+      </div>
     </TableContext.Provider>
   )
 }
 
-// Filter Components
+// --- Component: Filters ---
 export const Filters = () => {
-  const { filters, setFilters } = useTable()
+  const { filters, onFilterChange } = useTable()
 
   return (
-    <div className="flex items-center space-x-4 py-4">
-      <div className="flex items-center space-x-2">
+    <div className="flex items-center justify-between py-4">
+      <div className="flex items-center space-x-3">
         <label
           htmlFor="filter-active"
-          className="leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          className="text-sm font-medium leading-none text-gray-700 peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
         >
-          Status:
+          Filter by Status:
         </label>
-        <select
-          id="filter-active"
-          className="h-9 w-38 rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:ring-1 focus-visible:ring-gray-950 focus-visible:outline-none"
-          value={filters.isActive === null ? "all" : filters.isActive}
-          onChange={e => {
-            const val = e.target.value
-            setFilters(prev => ({
-              ...prev,
-              isActive: val === "all" ? null : val === "true"
-            }))
-          }}
-        >
-          <option value="all">All</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
+        
+        <div className="relative">
+          <select
+            id="filter-active"
+            className="h-9 w-40 appearance-none rounded-md border border-gray-300 bg-white pl-3 pr-8 text-sm text-gray-900 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-gray-950 hover:border-gray-400"
+            value={filters?.active || "all"}
+            onChange={e => onFilterChange("active", e.target.value)}
+          >
+            <option value="all">All Statuses</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+          {/*Custom arrow icon*/}
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-// Presentation Components (Styling)
+// --- Component: Pagination ---
+export const Pagination = () => {
+  const { pagination, onPageChange } = useTable()
+  
+  if (!pagination || pagination.totalPages <= 1) return null
+
+  const { page, totalPages } = pagination
+
+  return (
+    <div className="flex items-center justify-between py-2 px-1">
+      <div className="text-sm text-gray-500">
+        Page <span className="font-medium text-gray-900">{page}</span> of <span className="font-medium text-gray-900">{totalPages}</span>
+      </div>
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="inline-flex h-8 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="inline-flex h-8 items-center justify-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- Presentation Components ---
 export const Content = ({ className, children, ...props }) => (
-  <div className="relative w-full overflow-x-auto rounded-md border border-gray-200 bg-white">
+  <div className="relative w-full overflow-x-auto rounded-md border border-gray-200 bg-white shadow-sm">
     <table
       className={cn(
         "w-full table-fixed border-collapse text-left text-sm",
@@ -124,7 +133,7 @@ export const Content = ({ className, children, ...props }) => (
 )
 
 export const Header = ({ className, children, ...props }) => (
-  <thead className={cn("bg-gray-50/50 [&_tr]:border-b", className)} {...props}>
+  <thead className={cn("bg-gray-50/75 [&_tr]:border-b", className)} {...props}>
     {children}
   </thead>
 )
@@ -132,7 +141,7 @@ export const Header = ({ className, children, ...props }) => (
 export const Body = ({ className, children, ...props }) => {
   const { data } = useTable()
 
-  if (data.length === 0) {
+  if (!data || data.length === 0) {
     return (
       <tbody>
         <tr>
@@ -144,7 +153,9 @@ export const Body = ({ className, children, ...props }) => {
     )
   }
 
-  // Render Prop реализация
+  // Render Prop Pattern:
+  // Instead of hardcoding Row structure, we map data and call 'children' as a function.
+  // This allows the parent component to define exactly how each row looks.
   return (
     <tbody className={cn("[&_tr:last-child]:border-0", className)} {...props}>
       {typeof children === "function" ? data.map(children) : children}
@@ -152,51 +163,63 @@ export const Body = ({ className, children, ...props }) => {
   )
 }
 
-export const Row = ({ className, children, ...props }) => (
-  <tr
-    className={cn(
-      "border-b border-gray-200 transition-colors hover:bg-gray-100/50 data-[state=selected]:bg-gray-100",
-      className
-    )}
-    {...props}
-  >
-    {children}
-  </tr>
-)
+export const Row = ({ className, children, item, ...props }) => {
+  const { onToggleRow, expandedIds } = useTable()
+  
+  // Calculate state based on Context
+  const isExpanded = item ? expandedIds?.has(item.id) : false
+  const handleToggle = () => item && onToggleRow && onToggleRow(item.id)
+
+  return (
+    <tr
+      className={cn(
+        "border-b border-gray-200 transition-colors hover:bg-gray-50/50 data-[state=selected]:bg-gray-100",
+        className
+      )}
+      {...props}
+    >
+       {/* 
+          Function as Child Pattern (Nested):
+          Passes internal state (isExpanded, onToggle) back to the consumer
+          so they can render the expand button anywhere inside the row.
+       */}
+       {typeof children === "function" 
+        ? children({ item, isExpanded, onToggle: handleToggle }) 
+        : children
+      }
+    </tr>
+  )
+}
 
 export const Head = ({ className, sortKey, children, ...props }) => {
-  const { sortConfig, setSortConfig } = useTable()
+  const { sortConfig, onSort } = useTable()
 
-  const handleSort = useCallback(() => {
-    if (!sortKey) return
-    setSortConfig(current => {
-      if (current.key === sortKey) {
-        return {
-          key: sortKey,
-          direction: current.direction === "asc" ? "desc" : "asc"
-        }
-      }
-      return { key: sortKey, direction: "asc" }
-    })
-  }, [sortKey, setSortConfig])
+  const handleSort = () => {
+    if (!sortKey || !onSort) return
+    const isCurrentKey = sortConfig?.key === sortKey
+    const direction = isCurrentKey && sortConfig.dir === 'asc' ? 'desc' : 'asc'
+    onSort(sortKey, direction)
+  }
 
-  const isSorted = sortConfig.key === sortKey
-  const Icon = isSorted ? (sortConfig.direction === "asc" ? "▲" : "▼") : null
+  const isSorted = sortConfig?.key === sortKey
+  const Icon = isSorted ? (sortConfig.dir === "asc" ? "▲" : "▼") : null
 
   return (
     <th
       className={cn(
-        "px-4 py-3 align-middle font-medium whitespace-nowrap text-gray-500",
-        sortKey && "cursor-pointer select-none hover:text-gray-900",
+        "h-11 px-4 align-middle font-medium whitespace-nowrap text-gray-500",
+        sortKey && "cursor-pointer select-none hover:text-gray-900 transition-colors",
         className
       )}
       onClick={handleSort}
       {...props}
     >
-      <span className="inline-flex items-center gap-1">
+      <div className={cn("flex items-center gap-1", className?.includes("text-right") && "justify-end", className?.includes("text-center") && "justify-center")}>
         {children}
-        {Icon && <span className="text-[10px] leading-none">{Icon}</span>}
-      </span>
+        <span className={cn("inline-block w-3 text-[10px] leading-none text-center", isSorted ? "opacity-100" : "opacity-0")}>
+          {Icon || "•"}
+        </span>
+      </div>
     </th>
   )
 }
@@ -204,7 +227,7 @@ export const Head = ({ className, sortKey, children, ...props }) => {
 export const Cell = ({ className, children, ...props }) => (
   <td
     className={cn(
-      "overflow-hidden px-4 py-3 align-middle text-ellipsis whitespace-nowrap",
+      "overflow-hidden px-4 py-3 align-middle text-gray-700 text-ellipsis whitespace-nowrap",
       className
     )}
     {...props}
@@ -216,6 +239,7 @@ export const Cell = ({ className, children, ...props }) => (
 const Table = {
   Root,
   Filters,
+  Pagination,
   Content,
   Header,
   Body,
